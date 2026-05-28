@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""
+prepare-commit-msg
+==================
+Git이 커밋 메시지를 만들 때 자동으로 실행되는 훅입니다.
+환경변수 CLAUDE_ASSISTED 가 1 이면 커밋 메시지 끝에
+    Assisted-By: claude
+줄을 자동으로 추가합니다.
+
+설치 방법
+---------
+1) 이 파일을 저장소의 .git/hooks/prepare-commit-msg 로 복사
+2) chmod +x .git/hooks/prepare-commit-msg
+3) Claude Code 사용 중에는 자동으로 환경변수가 셋되도록 셸 alias 설정,
+   또는 IDE 통합으로 처리.
+   수동으로 표시하려면:  CLAUDE_ASSISTED=1 git commit -m "..."
+
+조직 전체 배포
+----------------
+git config --global core.hooksPath ~/.git-hooks
+로 모든 저장소에 일괄 적용.
+
+동작 규칙
+---------
+- merge / squash 커밋 메시지(두 번째 인자가 'merge' 또는 'squash')는 건드리지 않음
+- 이미 Assisted-By 라인이 있으면 중복 추가하지 않음
+- 환경변수가 셋되지 않았으면 아무 일도 하지 않음 (조용히 종료)
+"""
+from __future__ import annotations
+
+import os
+import re
+import sys
+from pathlib import Path
+
+TRAILER_KEY = "Assisted-By"
+TRAILER_VALUE = "claude"
+TRAILER_LINE = f"{TRAILER_KEY}: {TRAILER_VALUE}"
+
+
+def already_has_trailer(text: str) -> bool:
+    """메시지에 이미 Assisted-By 줄이 있는지 검사."""
+    pattern = re.compile(rf"^{TRAILER_KEY}\s*:", re.MULTILINE | re.IGNORECASE)
+    return bool(pattern.search(text))
+
+
+def append_trailer(text: str) -> str:
+    """
+    Git trailer 규칙에 맞게 메시지 끝에 trailer를 붙인다.
+    trailer 블록은 본문과 빈 줄 하나로 구분되어야 한다.
+    """
+    text = text.rstrip("\n")
+    # 마지막 비어 있지 않은 줄이 이미 trailer 형식이면(예: Refs:, Co-authored-by:)
+    # 그 블록 끝에 그대로 이어붙인다. 아니면 빈 줄 하나를 두고 붙인다.
+    last_block = text.split("\n\n")[-1] if text else ""
+    trailer_like = re.compile(r"^[A-Za-z][A-Za-z0-9-]*\s*:\s*\S")
+    is_trailer_block = bool(last_block) and all(
+        trailer_like.match(line) for line in last_block.splitlines() if line.strip()
+    )
+
+    if is_trailer_block:
+        return f"{text}\n{TRAILER_LINE}\n"
+    return f"{text}\n\n{TRAILER_LINE}\n"
+
+
+def main() -> int:
+    # Git이 넘겨주는 인자: <commit-msg-file> [<source> [<sha>]]
+    if len(sys.argv) < 2:
+        return 0
+    msg_path = Path(sys.argv[1])
+    source = sys.argv[2] if len(sys.argv) >= 3 else ""
+
+    # merge / squash 메시지는 손대지 않는다(데이터 오염 방지)
+    if source in {"merge", "squash"}:
+        return 0
+
+    # 사용자가 명시적으로 표시한 경우에만 동작
+    if os.environ.get("CLAUDE_ASSISTED") != "1":
+        return 0
+
+    try:
+        text = msg_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return 0
+
+    if already_has_trailer(text):
+        return 0
+
+    msg_path.write_text(append_trailer(text), encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
