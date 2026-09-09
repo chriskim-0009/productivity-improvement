@@ -15,3 +15,8 @@ venv/
 
 # NOTE: data.sqlite 는 의도적으로 커밋합니다 (Streamlit Cloud가 읽을 스냅샷).
 #       내부 데이터가 들어 있으니 반드시 "비공개(private)" 저장소를 쓰세요.
+
+# SQLite 사이드카 (커밋 금지)
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
