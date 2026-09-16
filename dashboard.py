@@ -278,8 +278,12 @@ LOVABLE_CSS = """
   }
   .stTabs [aria-selected="true"] {
     background-color: var(--text-charcoal) !important;
-    color: var(--bg-cream-2) !important;
     box-shadow: var(--inset-shadow);
+  }
+  /* 선택된 탭: 내부 텍스트(p/span 등)까지 밝은색 강제 — 검정 위 검정 방지 */
+  .stTabs [aria-selected="true"],
+  .stTabs [aria-selected="true"] * {
+    color: var(--bg-cream-2) !important;
   }
 
   /* Buttons & widgets — soft, bordered */
