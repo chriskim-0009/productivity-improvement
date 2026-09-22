@@ -3,8 +3,8 @@
 > 이 문서는 지금까지 구축한 시스템의 **전체 구조·배포·자동화·운영 방법**을 정리한 핸드오프 문서입니다.
 > 세부 변경 이력과 제안 커밋 메시지는 [CHANGES-ai-flag-detection.md](CHANGES-ai-flag-detection.md), 설계 결정은 [ADR-001-claude-productivity-dashboard.md](ADR-001-claude-productivity-dashboard.md) 참고.
 
-- **최종 갱신**: 2026-09-16
-- **상태**: 라이브 배포 완료 + 시간당 자동 갱신 동작 중
+- **최종 갱신**: 2026-09-22
+- **상태**: 라이브 배포 완료 + 시간당 자동 갱신 정상 동작 (자동화 경로 버그 수정 완료)
 
 ---
 
@@ -106,6 +106,7 @@ AI 어시스턴트(Claude Code) 도입이 팀 개발 흐름에 주는 효과를 
 
 - push 자격증명은 macOS **osxkeychain 캐시**를 사용(과거 수동 push 시 저장됨).
 - 데이터 무변경 시 push 생략, ETL 실패 시 이후 단계 중단 및 로그 기록.
+- **중요(경로)**: `.env`의 `DB_PATH`는 반드시 **절대경로**여야 합니다. 상대경로(`./data.sqlite`)면 cron(홈)·다른 위치에서 실행할 때 엉뚱한 빈 DB를 열어 `no such table: sync_state` 오류로 실패합니다. 스크립트도 실행 위치와 무관하도록 시작 시 `cd "$PROJ"`로 프로젝트 폴더로 이동합니다. (2026-09-22 수정 완료)
 
 ---
 
@@ -138,6 +139,7 @@ tail -n 30 ~/Desktop/Automation/ai_productivity/etl.log               # ETL
 | 증상 | 원인 / 조치 |
 |---|---|
 | 클라우드가 최신이 아님 | `refresh_publish.log`에서 push 성공 여부 확인. 실패면 아래 참고. |
+| `no such table: sync_state` | `.env`의 `DB_PATH`가 상대경로여서 빈 DB를 열었음 → **절대경로로 수정**, 잘못 생긴 `~/data.sqlite`·`~/Desktop/Automation/data.sqlite` 삭제. (2026-09-22 조치 완료) |
 | 로그에 "push 실패" 반복 | cron이 로그인 keychain 접근 불가(맥OS 제약). 맥 로그인 유지, 또는 **launchd LaunchAgent**로 전환(세션에서 실행). |
 | 로그 자체가 안 남음 | cron에 **전체 디스크 접근 권한** 필요(시스템 설정 → 개인정보 보호). |
 | 특정 저장소 커밋 0 | 90일 내 활동 없음이거나 대상 브랜치 없음(정상). |
