@@ -115,9 +115,26 @@ Claude Code는 커밋을 저작하면 **머신 설정과 무관하게** `Co-auth
 
 ---
 
+## 추가 변경 — Lead time·PR 사이클 소표본 가드 (2026-09-23)
+
+### 왜 바꿨나
+AI-연결 이슈/PR 표본이 주당 1~4건으로 적어, 소수 표본에서 이상치 하나가 주간 중앙값을 크게 왜곡했다. 예: Lead time에서 `AS-23469`(In Progress 약 45일, 1,086h) 한 건이 표본 2건짜리 주의 중앙값을 ~580h로 끌어올려 "AI가 느리다"는 오해를 유발.
+
+### 무엇을 바꿨나
+**`dashboard.py`** (Lead time · PR 사이클 탭)
+1. 주별 (week, bucket) 집계 시 **중앙값 + 표본 수 n**을 함께 계산.
+2. **표본 3건 미만 주는 중앙값을 NaN 처리**해 표시하지 않음(선 끊김) → 왜곡된 급등 제거.
+3. 각 점에 **표본 수 n을 hover로 노출**, 캡션에 소표본 생략 안내 추가(`cap_lead`, `cap_pr_cycle`).
+4. 임계값은 각 탭의 `min_sample`(기본 3)로 조정.
+
+### 한계
+- 표시 왜곡은 막았으나 근본 원인(커밋의 Jira 키 참조 부족 → 연결 표본 부족)은 그대로. 처리량·커밋 볼륨·채택률은 전체 집계라 미적용.
+
+---
+
 ## 제안 커밋 메시지
 
-> 논리적으로 별개 변경이므로 **5개 커밋**으로 나누는 것을 권장.
+> 논리적으로 별개 변경이므로 **6개 커밋**으로 나누는 것을 권장.
 
 ### 커밋 1 — Co-authored-by 인식
 
@@ -204,6 +221,22 @@ BR-004 등 이슈 키가 아닌 토큰을 jira_keys로 오탐해 데이터를 �
 
 - etl.py: _build_jira_key_re()로 JIRA_PROJECTS 기반 패턴 생성
   (미설정 시 기존 일반 패턴 폴백). 기존 적재분은 별도 백필로 재파싱.
+
+Assisted-By: claude
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+```
+
+### 커밋 6 — Lead time·PR 사이클 소표본 가드 (fix)
+
+```text
+fix(dashboard): Lead time·PR 사이클 소표본 가드 (표본 3건 미만 주 생략)
+
+AI-연결 표본이 적어 이상치 하나로 주간 중앙값이 급등하던 문제를 방지한다.
+(예: AS-23469 1,086h 한 건이 2건짜리 주 중앙값을 ~580h로 왜곡)
+주별 표본 3건 미만이면 점을 생략하고, hover로 표본 수(n)를 노출한다.
+
+- dashboard.py: 두 탭에서 median+count 집계 후 n<min_sample(기본 3) 점 숨김,
+  hover_data에 n 추가, 캡션 안내(cap_lead / cap_pr_cycle)
 
 Assisted-By: claude
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
