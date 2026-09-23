@@ -116,6 +116,10 @@ T: dict[str, dict[str, str]] = {
         "KR": "주별 Lead time 중앙값. 두 선 모두 떨어지면 좋은 신호. 표본 {n}건 미만인 주는 신뢰도가 낮아 생략했습니다(점에 마우스를 올리면 표본 수 확인).",
         "EN": "Weekly median lead time; both trending down is good. Weeks with fewer than {n} issues are omitted as unreliable (hover a point for its sample size).",
     },
+    "cap_pr_cycle": {
+        "KR": "주별 PR 머지 시간 중앙값. 표본 {n}건 미만인 주는 신뢰도가 낮아 생략했습니다(점에 마우스를 올리면 표본 수 확인).",
+        "EN": "Weekly median PR merge time. Weeks with fewer than {n} PRs are omitted as unreliable (hover a point for its sample size).",
+    },
     "cap_throughput_sp": {
         "KR": "이 기간 총 완료 스토리포인트: {sp}",
         "EN": "Total story points completed in range: {sp}",
@@ -738,12 +742,20 @@ with tab4:
     if df.empty:
         st.info(t("no_chart_data"))
     else:
+        # 표본이 이보다 적은 주는 소수 PR/이상치로 중앙값이 왜곡되어 표시하지 않음
+        min_sample = 3
         df["cycle_hours"] = (
             pd.to_datetime(df["merged_at"]) - pd.to_datetime(df["opened_at"])
         ).dt.total_seconds() / 3600.0
         df["week"] = pd.to_datetime(df["merged_at"]).dt.to_period("W").dt.to_timestamp()
         df["bucket"] = df["ai_flag"].map({1: t("bucket_ai"), 0: t("bucket_non_ai")})
-        agg = df.groupby(["week", "bucket"])["cycle_hours"].median().reset_index()
+        agg = (
+            df.groupby(["week", "bucket"])["cycle_hours"]
+            .agg(cycle_hours="median", n="count")
+            .reset_index()
+        )
+        # 표본 부족 주는 중앙값을 NaN으로 → 선이 끊겨 표시되지 않음(왜곡 방지). n은 hover로 노출.
+        agg["cycle_hours"] = agg["cycle_hours"].where(agg["n"] >= min_sample)
         fig = px.line(
             agg,
             x="week",
@@ -751,6 +763,7 @@ with tab4:
             color="bucket",
             markers=True,
             color_discrete_map=COLOR_MAP,
+            hover_data={"n": True},
             labels={
                 "cycle_hours": t("ax_pr_cycle"),
                 "week": t("ax_week"),
@@ -758,6 +771,7 @@ with tab4:
             },
         )
         st.plotly_chart(_style(fig), use_container_width=True)
+        st.caption(t("cap_pr_cycle", n=min_sample))
 
 # ── 5. Claude adoption ───────────────────────────────────────────────────
 with tab5:
