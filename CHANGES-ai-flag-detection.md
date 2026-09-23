@@ -115,17 +115,21 @@ Claude Code는 커밋을 저작하면 **머신 설정과 무관하게** `Co-auth
 
 ---
 
-## 추가 변경 — Lead time·PR 사이클 소표본 가드 (2026-09-23)
+## 추가 변경 — Lead time·PR 사이클 극단 이상치 제외 (2026-09-23)
+
+> 처음엔 "표본 3건 미만 주 생략(소표본 가드)"로 접근했으나, AI 선이 통째로 사라지는 부작용이 있어 **되돌리고**, 대신 **극단 이상치만 제외**하는 방식으로 변경했다.
 
 ### 왜 바꿨나
-AI-연결 이슈/PR 표본이 주당 1~4건으로 적어, 소수 표본에서 이상치 하나가 주간 중앙값을 크게 왜곡했다. 예: Lead time에서 `AS-23469`(In Progress 약 45일, 1,086h) 한 건이 표본 2건짜리 주의 중앙값을 ~580h로 끌어올려 "AI가 느리다"는 오해를 유발.
+비정상적으로 오래 걸린 이슈 하나가 주간 중앙값을 급등시켰다. 예: Lead time에서 `AS-23469`(In Progress 약 45일, 1,086h)가 표본이 적은 주의 중앙값을 ~580h로 끌어올려 "AI가 느리다"는 오해를 유발.
 
 ### 무엇을 바꿨나
 **`dashboard.py`** (Lead time · PR 사이클 탭)
-1. 주별 (week, bucket) 집계 시 **중앙값 + 표본 수 n**을 함께 계산.
-2. **표본 3건 미만 주는 중앙값을 NaN 처리**해 표시하지 않음(선 끊김) → 왜곡된 급등 제거.
-3. 각 점에 **표본 수 n을 hover로 노출**, 캡션에 소표본 생략 안내 추가(`cap_lead`, `cap_pr_cycle`).
-4. 임계값은 각 탭의 `min_sample`(기본 3)로 조정.
+1. `_drop_upper_outliers()` 헬퍼 추가 — **Tukey 상단 울타리(Q3 + 1.5·IQR)를 넘는 개별 값 제외**(표본 8건 미만이면 원본 유지).
+2. 중앙값 계산 전 이 헬퍼를 적용 → 급등 제거. **모든 주는 그대로 표시**(소표본 주를 숨기지 않음).
+3. 캡션에 이상치 제외 안내(`cap_lead`, `cap_pr_cycle`).
+
+### 검증
+- 상단 울타리 = 453h, 전체 233건 중 이상치 9건 제외, `AS-23469`(1,086h) 제외 확인 → Lead time 최대 ~580h → ~215h로 정상화.
 
 ### 한계
 - 표시 왜곡은 막았으나 근본 원인(커밋의 Jira 키 참조 부족 → 연결 표본 부족)은 그대로. 처리량·커밋 볼륨·채택률은 전체 집계라 미적용.
@@ -226,17 +230,18 @@ Assisted-By: claude
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 ```
 
-### 커밋 6 — Lead time·PR 사이클 소표본 가드 (fix)
+### 커밋 6 — Lead time·PR 사이클 극단 이상치 제외 (fix)
 
 ```text
-fix(dashboard): Lead time·PR 사이클 소표본 가드 (표본 3건 미만 주 생략)
+fix(dashboard): Lead time·PR 사이클 극단 이상치 제외 (Q3+1.5·IQR)
 
-AI-연결 표본이 적어 이상치 하나로 주간 중앙값이 급등하던 문제를 방지한다.
-(예: AS-23469 1,086h 한 건이 2건짜리 주 중앙값을 ~580h로 왜곡)
-주별 표본 3건 미만이면 점을 생략하고, hover로 표본 수(n)를 노출한다.
+비정상적으로 오래 걸린 이슈/PR 하나가 주간 중앙값을 급등시키던 문제를 방지한다.
+(예: AS-23469 1,086h가 주간 중앙값을 ~580h로 왜곡)
+표본 전체를 숨기던 소표본 가드는 되돌리고, Tukey 상단 울타리(Q3+1.5·IQR)를
+넘는 개별 값만 제외해 모든 주를 그대로 표시한다.
 
-- dashboard.py: 두 탭에서 median+count 집계 후 n<min_sample(기본 3) 점 숨김,
-  hover_data에 n 추가, 캡션 안내(cap_lead / cap_pr_cycle)
+- dashboard.py: _drop_upper_outliers() 추가, Lead time·PR 사이클에서
+  중앙값 계산 전 적용. 캡션 안내(cap_lead / cap_pr_cycle)
 
 Assisted-By: claude
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
