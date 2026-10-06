@@ -1,5 +1,7 @@
 # Claude 생산성 대시보드 — PoC 시작 가이드
 
+> 영문 버전: [README.en.md](README.en.md) · 운영/핸드오프 문서: [OPERATIONS.md](OPERATIONS.md)
+
 이 폴더 안에 있는 파일들로, 5분 만에 데모를 띄우고 1주일 안에 PoC를 완성할 수 있습니다. 개발자가 아닌 분도 따라올 수 있도록 단계별로 설명했습니다.
 
 ## 이 폴더에 들어 있는 것
@@ -10,8 +12,9 @@
 | `schema.sql` | 데이터를 담아둘 표(테이블) 정의 |
 | `prepare-commit-msg` | 커밋할 때 `Assisted-By: claude`를 자동으로 붙여주는 Git 훅 (Python 스크립트) |
 | `etl.py` | Jira와 **Bitbucket Cloud**에서 데이터를 가져오는 수집 스크립트 |
-| `dashboard.py` | 차트 6개와 필터가 있는 웹 대시보드 (Streamlit) |
+| `dashboard.py` | 차트 5개와 필터가 있는 웹 대시보드 (Streamlit) |
 | `requirements.txt` | 필요한 Python 패키지 목록 |
+| `OPERATIONS.md` | 운영/핸드오프 가이드 (구조·배포·자동화·트러블슈팅) |
 
 ---
 
@@ -47,14 +50,14 @@ pip install -r requirements.txt
 ```env
 # Jira (Atlassian Cloud)
 JIRA_BASE_URL=https://doverunner.atlassian.net
-JIRA_EMAIL=chris.kim@doverunner.com
+JIRA_EMAIL=you@doverunner.com
 JIRA_TOKEN=발급받은_API_토큰
-JIRA_PROJECTS=BILL,WEB,APP
+JIRA_PROJECTS=AS,AR
 JIRA_TEAM_FIELD=                # 팀 정보가 들어있는 커스텀 필드 ID. 없으면 비워두세요(component를 대신 사용)
 
 # Bitbucket Cloud
 # API token이면 BITBUCKET_EMAIL을, App password면 BITBUCKET_USERNAME을 채우세요
-BITBUCKET_EMAIL=chris.kim@doverunner.com
+BITBUCKET_EMAIL=you@doverunner.com
 # BITBUCKET_USERNAME=          # App password 사용 시
 BITBUCKET_TOKEN=발급받은_API_토큰_또는_App_password
 # 저장소 지정 방식 2가지 — 하나만 있어도 되고, 둘을 함께 쓰면 합쳐집니다.
@@ -65,9 +68,11 @@ BITBUCKET_PROJECTS=AS,AR         # 탐색할 프로젝트 키(콤마 구분). �
 BITBUCKET_ACTIVE_DAYS=90         # 최근 N일 내 업데이트된 저장소만 (기본 90)
 # (B) 수동 지정: workspace/repo_slug 콤마 구분. 자동 탐색을 안 쓰면 이것만으로 동작.
 BITBUCKET_REPOS=
-BITBUCKET_BRANCH=develop        # 커밋을 수집할 브랜치 (PoC 기본값: develop). 해당 브랜치가 없는 저장소는 건너뜁니다.
+BITBUCKET_BRANCH=develop        # 커밋을 수집할 브랜치 (PoC 기본값: develop). 해당 브랜치가 없는 저장소는 기본 브랜치로 폴백.
 
-DB_PATH=./data.sqlite
+# 중요: 반드시 "절대경로"로 지정하세요. 상대경로(./data.sqlite)면 cron/다른 위치에서
+# 실행할 때 엉뚱한 빈 DB를 열어 "no such table" 오류가 납니다.
+DB_PATH=/Users/<사용자>/Desktop/Automation/ai_productivity/data.sqlite
 SLACK_WEBHOOK=                  # 실패 알림이 필요하면 채우세요
 ```
 
@@ -98,7 +103,7 @@ python etl.py
 streamlit run dashboard.py
 ```
 
-브라우저가 `http://localhost:8501`로 열립니다. 사이드바에서 기간/팀/저장소를 선택하면 차트 6개가 갱신됩니다.
+브라우저가 `http://localhost:8501`로 열립니다. 사이드바에서 기간/팀/저장소를 선택하면 차트 5개가 갱신됩니다.
 
 ### 6) 1시간마다 자동 갱신되게 하기
 
@@ -122,7 +127,7 @@ crontab -e
 
 **c. Bitbucket Pipelines의 schedule 사용**
 
-이미 화면에서 보이는 `bitbucket-pipelines.yml`에 schedule 단계를 추가합니다.
+`bitbucket-pipelines.yml`에 schedule 단계를 추가합니다.
 
 ```yaml
 # bitbucket-pipelines.yml
@@ -142,6 +147,8 @@ pipelines:
 ```
 
 Bitbucket Pipelines 변수에 `JIRA_TOKEN`, `BITBUCKET_TOKEN` 등을 **Secured**로 등록하세요.
+
+> 팁: **호스팅 대시보드(예: Streamlit Cloud)** 도 최신으로 유지하려면, 스케줄 작업이 갱신된 `data.sqlite` 스냅샷을 커밋·push까지 해야 합니다. 전체 자동화는 `OPERATIONS.md` 참고.
 
 ---
 
@@ -186,10 +193,10 @@ alias gcai='CLAUDE_ASSISTED=1 git commit'
 ## 자주 묻는 질문
 
 **Q0. Bitbucket 인증이 401로 실패해요.**
-A. 세 가지를 확인하세요. (1) `BITBUCKET_EMAIL`이 Atlassian 계정의 정확한 이메일인지 (App password를 쓴다면 `BITBUCKET_USERNAME`에 Bitbucket 사용자명), (2) API token에 `read:repository:bitbucket` 등 Bitbucket scope가 포함되었는지, (3) `BITBUCKET_REPOS` 항목이 `workspace/repo_slug`(예: `DoveRunner/test1`) 형식인지.
+A. 세 가지를 확인하세요. (1) `BITBUCKET_EMAIL`이 Atlassian 계정의 정확한 이메일인지 (App password를 쓴다면 `BITBUCKET_USERNAME`에 Bitbucket 사용자명), (2) API token에 `read:repository:bitbucket` 등 Bitbucket scope가 포함되었는지, (3) `BITBUCKET_REPOS` 항목이 `workspace/repo_slug`(예: `appsealing/owl-app`) 형식인지.
 
 **Q1. 데이터가 비어있어요.**
-A. `etl.py`를 먼저 한 번 실행했는지 확인하세요. 환경변수가 비어 있으면 API 호출이 실패합니다. `etl.log`를 확인해보세요.
+A. `etl.py`를 먼저 한 번 실행했는지 확인하세요. 환경변수가 비어 있으면 API 호출이 실패합니다. `etl.log`를 확인해보세요. 또한 `DB_PATH`가 **절대경로**인지 확인하세요(상대경로면 cron 등 다른 위치에서 엉뚱한 빈 DB를 열 수 있습니다).
 
 **Q2. 개인별 차트는 왜 없나요?**
 A. 1차 PoC에서는 의도적으로 비활성화했습니다. "개인 줄세우기" 우려를 해소한 뒤(별도 ADR로 거버넌스 결정), 단계적으로 도입합니다.
@@ -197,17 +204,20 @@ A. 1차 PoC에서는 의도적으로 비활성화했습니다. "개인 줄세우
 **Q3. Trailer가 누락된 커밋이 너무 많아요.**
 A. 두 종류의 신호가 함께 집계됩니다: (1) 훅이 붙이는 `Assisted-By: claude`, (2) **Claude Code가 커밋을 저작하면 자동으로 남기는 `Co-authored-by: Claude ...` 트레일러**. 즉 Claude Code로 커밋했다면 훅이 설치되어 있지 않아도 AI 커밋으로 잡힙니다. 그래도 누락이 많다면: 대시보드 하단 "데이터 품질 안내"에서 추정치를 확인하고, (a) Claude Code 밖에서 손으로 커밋하는 경우를 위해 `prepare-commit-msg` 훅이 설치/활성화되어 있는지, (b) IDE 통합이 환경변수를 잘 셋업하는지 점검하세요. (판별 규칙은 `etl.py`의 `parse_commit_flags`에 한곳으로 모여 있습니다.)
 
-**Q4. 결함률(defect rate) 정의가 우리 팀과 맞지 않아요.**
-A. 현재는 "이슈 type이 Bug/Defect인 비율"로 간단히 잡았습니다. 팀에서 `hotfix` 라벨이나 `linked issues` 기반으로 정의하고 싶다면 `etl.py`와 `dashboard.py` 둘 다에서 조정해야 합니다 — D6 매니저 리뷰 때 합의를 거쳐 PoC 마지막 날 반영하세요.
+**Q4. 결함률(defect rate) 차트는 어디 갔나요?**
+A. 현재 대시보드에서 제거했습니다. 기존 정의가 "이슈 type이 Bug/Defect인 비율"일 뿐 AI/Human으로 분해되지 않아 이 대시보드 목적과 맞지 않고 오해를 부를 수 있었습니다. AI vs Human 결함/재작업(rework) 형태의 제대로 된 지표는 ADR-002에서 재도입 예정입니다.
 
-**Q5. PostgreSQL로 옮기려면?**
-A. 코드에서 `sqlite3` → `psycopg2`/`sqlalchemy`로 바꾸면 됩니다. 스키마는 거의 그대로 옮길 수 있습니다. 팀이 50명 넘어가거나 한 달치 데이터가 백만 행을 넘기 시작하면 그 시점에 작업하세요.
+**Q5. Lead time / PR 사이클에서 일부 점이 빠지는데요?**
+A. 주간 중앙값을 계산하기 전에 **비정상적으로 오래 걸린 이상치**(Tukey 상단 울타리, Q3 + 1.5·IQR 초과)를 제외합니다. 그래서 유난히 오래 열려 있던 이슈/PR 하나(예: 약 45일)가 추세를 왜곡하지 않습니다. 커밋이 Jira 키를 잘 참조하지 않아 AI-연결 표본이 적으므로, 이 비교는 여전히 신중히 읽어야 합니다.
+
+**Q6. PostgreSQL로 옮기려면?**
+A. 코드에서 `sqlite3` → `psycopg2`/`sqlalchemy`로 바꾸면 됩니다. 스키마는 거의 그대로 옮길 수 있습니다. 팀이 50명 넘어가거나 한 달치 데이터가 백만 행을 넘기 시작하면 그 시점에 작업하세요. 호스팅 대시보드에 SQLite 스냅샷을 push할 필요도 없어집니다.
 
 ---
 
 ## 다음 단계 (PoC 이후)
 
 - ADR-002 (예정): 개인 차원 측정에 대한 거버넌스/프라이버시 결정
-- 결함률 정의 정교화 (linked issues 추적, 같은 파일 재수정 패턴 분석)
+- 품질 지표 정교화 (linked issues 추적, 같은 파일 재수정 패턴 분석; AI vs Human 결함/재작업 재도입)
 - Cursor, Copilot 등 다른 AI 도구 라벨 통합 (`Assisted-By: cursor`, 등)
 - 매니저 알림: 주간 변동률이 임계치를 넘으면 Slack DM
