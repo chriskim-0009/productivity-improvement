@@ -67,6 +67,7 @@ AI 어시스턴트(Claude Code) 도입이 팀 개발 흐름에 주는 효과를 
 - **Jira 타임스탬프 정규화**: `+0900`→`+09:00`으로 저장해 SQLite `date()` 파싱 가능하게(대시보드 집계 정상화).
 - **Jira 키 정규식 제한**: `JIRA_PROJECTS` 접두사만 인식 → `SHA-256`·`CWE-*` 등 오탐 제거.
 - **`daily_quality` 전체 재생성**: 매 실행마다 commits 전체에서 재집계 → ETL 공백에 따른 빈 구간 원천 차단.
+- **완료일 대체(resolutiondate 보완)**: 상태가 'Done'인데 Jira `resolutiondate`가 비어 있는 이슈는, 'Done'으로 전이한 (가장 최근) 시각을 완료일로 대체(`DONE_STATUSES`). Lead time·Throughput에서 누락되던 완료 이슈를 포함한다(기존 630건 백필, 2026-10-14).
 
 ### 4-2. 대시보드 UX (`dashboard.py`)
 - **팀 미지정 `(미지정)` 버킷**: component 없는 이슈(다수)도 표시되도록 필터 보정.

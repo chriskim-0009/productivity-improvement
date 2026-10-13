@@ -312,6 +312,11 @@ def fetch_jira_issues() -> int:
     log.info("Jira: upserted %d issues", inserted)
     return inserted
 
+# 완료로 간주하는 상태 이름(소문자). resolutiondate가 비어 있으면
+# 이 상태로 전이한 시각을 완료일(resolved_at) 대체값으로 사용한다.
+DONE_STATUSES = {"done", "resolved", "closed", "완료"}
+
+
 def _upsert_jira_issue(issue: dict, team_field: str) -> None:
     key = issue["key"]
     f = issue["fields"]
@@ -332,6 +337,7 @@ def _upsert_jira_issue(issue: dict, team_field: str) -> None:
         team = f["components"][0].get("name")
 
     first_in_progress = None
+    done_at = None
     transitions: list[tuple[str | None, str, str]] = []
     for entry in (issue.get("changelog") or {}).get("histories", []):
         at = _norm_dt(entry.get("created"))
@@ -342,6 +348,13 @@ def _upsert_jira_issue(issue: dict, team_field: str) -> None:
                 transitions.append((from_s, to_s, at))
                 if to_s and to_s.lower() in {"in progress", "doing"} and first_in_progress is None:
                     first_in_progress = at
+                if to_s and at and to_s.strip().lower() in DONE_STATUSES:
+                    if done_at is None or at > done_at:
+                        done_at = at
+
+    # resolutiondate가 비어도 현재 상태가 '완료'면, 완료 상태로의 (가장 최근) 전이 시각으로 대체
+    if not resolved and status and status.strip().lower() in DONE_STATUSES and done_at:
+        resolved = done_at
 
     updated = _norm_dt(f.get("updated")) or created
 
