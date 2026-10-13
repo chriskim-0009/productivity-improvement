@@ -2,12 +2,13 @@
 # =============================================================================
 # refresh_and_publish.sh
 # ETL 실행 → 최신 data.sqlite를 Streamlit 배포 저장소로 복사 → 변경 시 커밋·push.
-# cron에서 매시간 호출된다. git push 자격증명은 osxkeychain 캐시를 사용하므로
-# 사용자가 로그인된 세션이어야 안정적으로 동작한다(아래 주의 참고).
+# launchd LaunchAgent(com.doverunner.productivity-etl)가 매시간 호출한다.
+# git push 자격증명은 osxkeychain 캐시 사용(사용자 세션에서 실행되어 접근 가능).
+# 오프라인/절전 시엔 아래 네트워크 사전점검으로 빠르게 건너뛴다.
 # =============================================================================
 
-PROJ="/Users/kor-sel-ck-mac/Desktop/Automation/ai_productivity"
-DEPLOY="/Users/kor-sel-ck-mac/Desktop/ai_productivity_streamlit_deploy"
+PROJ="/Users/kor-sel-ck-mac/ai_productivity"
+DEPLOY="/Users/kor-sel-ck-mac/ai_productivity_streamlit_deploy"
 LOG="$PROJ/refresh_publish.log"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S')  $1" >> "$LOG"; }
@@ -16,6 +17,13 @@ log "===== 시작 ====="
 
 # 실행 위치(cwd)에 무관하게 동작하도록 프로젝트 폴더로 이동
 cd "$PROJ" || { log "프로젝트 폴더 접근 실패: $PROJ"; exit 1; }
+
+# 0) 네트워크/DNS 사전 점검 — 오프라인·절전 시 길게 매달리지 않고 빠르게 건너뜀(정상 종료)
+if ! nslookup doverunner.atlassian.net >/dev/null 2>&1; then
+  log "네트워크/DNS 불가(doverunner.atlassian.net 해석 실패) — 이번 실행 건너뜀."
+  log "===== 종료 ====="
+  exit 0
+fi
 
 # 1) ETL — 로컬 data.sqlite 최신화
 if "$PROJ/.venv/bin/python" "$PROJ/etl.py" >> "$PROJ/etl.log" 2>&1; then
