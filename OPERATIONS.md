@@ -3,8 +3,8 @@
 > 이 문서는 지금까지 구축한 시스템의 **전체 구조·배포·자동화·운영 방법**을 정리한 핸드오프 문서입니다.
 > 세부 변경 이력과 제안 커밋 메시지는 [CHANGES-ai-flag-detection.md](CHANGES-ai-flag-detection.md), 설계 결정은 [ADR-001-claude-productivity-dashboard.md](ADR-001-claude-productivity-dashboard.md) 참고.
 
-- **최종 갱신**: 2026-09-23
-- **상태**: 라이브 배포 완료 + 시간당 자동 갱신 정상 동작 (Lead time·PR 사이클 이상치 제외 적용)
+- **최종 갱신**: 2026-10-13
+- **상태**: 라이브 배포 + 시간당 자동 갱신(launchd) 정상 동작. 프로젝트는 `~/ai_productivity`(Desktop 밖, TCC 회피).
 
 ---
 
@@ -14,8 +14,8 @@ AI 어시스턴트(Claude Code) 도입이 팀 개발 흐름에 주는 효과를 
 
 - **라이브 대시보드(Streamlit Cloud)**: `https://chriskim-0009-k6vetyecjymgwffpnwanvj.streamlit.app`
 - **팀 공유용 요약 페이지(Artifact, KR/EN)**: `https://claude.ai/code/artifact/3d78a28e-5c2a-46b8-a316-e48042672eb3`
-- **소스(로컬)**: `~/Desktop/Automation/ai_productivity/`
-- **배포 저장소(로컬)**: `~/Desktop/ai_productivity_streamlit_deploy/`
+- **소스(로컬)**: `~/ai_productivity/`
+- **배포 저장소(로컬)**: `~/ai_productivity_streamlit_deploy/`
 - **GitHub(비공개)**: `chriskim-0009/productivity-improvement`
 
 ---
@@ -54,7 +54,7 @@ AI 어시스턴트(Claude Code) 도입이 팀 개발 흐름에 주는 효과를 
 | `refresh_publish.log` | 자동화 실행 로그 |
 | `etl.log` | ETL 실행 로그 |
 | `data.sqlite` | 로컬 데이터 |
-| `~/Desktop/ai_productivity_streamlit_deploy/` | 배포 저장소(클라우드가 읽는 스냅샷) |
+| `~/ai_productivity_streamlit_deploy/` | 배포 저장소(클라우드가 읽는 스냅샷) |
 
 ---
 
@@ -98,16 +98,25 @@ AI 어시스턴트(Claude Code) 도입이 팀 개발 흐름에 주는 효과를 
 
 ---
 
-## 6. 자동화 (cron)
+## 6. 자동화 (launchd LaunchAgent)
 
-```
-0 * * * * /Users/kor-sel-ck-mac/Desktop/Automation/ai_productivity/refresh_and_publish.sh
-```
-스크립트 동작: `etl.py` 실행 → `data.sqlite`를 배포 폴더로 복사 → **데이터 변경 시에만** 커밋·`git push` → Streamlit Cloud 자동 재배포. 로그는 `refresh_publish.log`.
+매시 정각 `refresh_and_publish.sh`를 실행하는 **launchd LaunchAgent**로 자동화한다.
+- plist: `~/Library/LaunchAgents/com.doverunner.productivity-etl.plist` (Label: `com.doverunner.productivity-etl`)
+- 스크립트 동작: `etl.py` 실행 → `data.sqlite`를 배포 폴더로 복사 → **데이터 변경 시에만** 커밋·`git push` → Streamlit Cloud 자동 재배포.
+- 로그: `refresh_publish.log`(스크립트 진행), `launchd.log`(launchd stdout/stderr).
 
-- push 자격증명은 macOS **osxkeychain 캐시**를 사용(과거 수동 push 시 저장됨).
+제어 명령:
+```bash
+launchctl list | grep productivity-etl                                    # 상태(PID/최근 exit)
+launchctl kickstart -k gui/$(id -u)/com.doverunner.productivity-etl        # 즉시 1회 실행
+launchctl bootout   gui/$(id -u) ~/Library/LaunchAgents/com.doverunner.productivity-etl.plist   # 중지
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.doverunner.productivity-etl.plist   # 등록/시작
+```
+
+- **중요(위치)**: 프로젝트와 배포 폴더는 반드시 **`~/Desktop` 밖**(`~/ai_productivity`, `~/ai_productivity_streamlit_deploy`)에 둔다. `~/Desktop`·`~/Documents`·`~/Downloads`는 macOS **TCC 보호 폴더**라 **백그라운드 프로세스(cron·launchd)가 그 안의 파일을 읽지 못해** 자동 실행이 조용히 실패한다(초기 cron이 안 돌던 근본 원인). → 2026-10-13 Desktop에서 홈으로 이동하고 cron → launchd로 전환.
+- push 자격증명은 macOS **osxkeychain 캐시**를 사용. LaunchAgent는 사용자 세션에서 실행되어 keychain·파일 접근이 정상이다(cron의 keychain 제약 없음).
+- **중요(경로)**: `.env`의 `DB_PATH`는 반드시 **절대경로**여야 한다. 상대경로(`./data.sqlite`)면 다른 위치에서 실행 시 빈 DB를 열어 `no such table: sync_state` 오류가 난다. 스크립트도 시작 시 `cd "$PROJ"`로 이동한다.
 - 데이터 무변경 시 push 생략, ETL 실패 시 이후 단계 중단 및 로그 기록.
-- **중요(경로)**: `.env`의 `DB_PATH`는 반드시 **절대경로**여야 합니다. 상대경로(`./data.sqlite`)면 cron(홈)·다른 위치에서 실행할 때 엉뚱한 빈 DB를 열어 `no such table: sync_state` 오류로 실패합니다. 스크립트도 실행 위치와 무관하도록 시작 시 `cd "$PROJ"`로 프로젝트 폴더로 이동합니다. (2026-09-22 수정 완료)
 
 ---
 
@@ -115,23 +124,23 @@ AI 어시스턴트(Claude Code) 도입이 팀 개발 흐름에 주는 효과를 
 
 **지금 즉시 수동 갱신(로컬+클라우드):**
 ```bash
-~/Desktop/Automation/ai_productivity/refresh_and_publish.sh
+~/ai_productivity/refresh_and_publish.sh
 ```
 
 **ETL만 수동 실행(로컬 DB만):**
 ```bash
-cd ~/Desktop/Automation/ai_productivity && ./.venv/bin/python etl.py >> etl.log 2>&1
+cd ~/ai_productivity && ./.venv/bin/python etl.py >> etl.log 2>&1
 ```
 
 **로컬 대시보드 확인:**
 ```bash
-cd ~/Desktop/Automation/ai_productivity && ./.venv/bin/streamlit run dashboard.py
+cd ~/ai_productivity && ./.venv/bin/streamlit run dashboard.py
 ```
 
 **로그 보기:**
 ```bash
-tail -n 30 ~/Desktop/Automation/ai_productivity/refresh_publish.log   # 자동화
-tail -n 30 ~/Desktop/Automation/ai_productivity/etl.log               # ETL
+tail -n 30 ~/ai_productivity/refresh_publish.log   # 자동화
+tail -n 30 ~/ai_productivity/etl.log               # ETL
 ```
 
 **갱신 주기 변경:** `crontab -e`에서 `0 * * * *` 수정 (예: 6시간마다 `0 */6 * * *`).
@@ -141,8 +150,9 @@ tail -n 30 ~/Desktop/Automation/ai_productivity/etl.log               # ETL
 |---|---|
 | 클라우드가 최신이 아님 | `refresh_publish.log`에서 push 성공 여부 확인. 실패면 아래 참고. |
 | `no such table: sync_state` | `.env`의 `DB_PATH`가 상대경로여서 빈 DB를 열었음 → **절대경로로 수정**, 잘못 생긴 `~/data.sqlite`·`~/Desktop/Automation/data.sqlite` 삭제. (2026-09-22 조치 완료) |
-| 로그에 "push 실패" 반복 | cron이 로그인 keychain 접근 불가(맥OS 제약). 맥 로그인 유지, 또는 **launchd LaunchAgent**로 전환(세션에서 실행). |
-| 로그 자체가 안 남음 | cron에 **전체 디스크 접근 권한** 필요(시스템 설정 → 개인정보 보호). |
+| 자동 실행 안 됨 / `refresh_publish.log`에 "시작" 없음 | 프로젝트가 `~/Desktop` 등 **TCC 보호 폴더**에 있으면 백그라운드(launchd/cron)가 파일을 못 읽음. `~/ai_productivity`(Desktop 밖)에 두어야 함(현재 구성). `launchctl list \| grep productivity-etl`로 상태, `launchd.log`에서 에러 확인. |
+| launchd 작업이 exit 127 (`can't open input file`) | 스크립트가 TCC 보호 폴더 안에 있음 → Desktop 밖으로 이동(이 전환으로 해결, 2026-10-13). |
+| 로그에 "push 실패" | keychain 접근 실패/네트워크. LaunchAgent는 세션에서 실행돼 보통 정상이나, 자격증명이 없으면 터미널에서 `git push` 한 번 수동 인증. |
 | 특정 저장소 커밋 0 | 90일 내 활동 없음이거나 대상 브랜치 없음(정상). |
 | 대시보드 특정 탭 비어있음 | 해당 지표 기간 내 데이터 없음. 기간 필터 확장. |
 

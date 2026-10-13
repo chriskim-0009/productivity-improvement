@@ -72,7 +72,7 @@ BITBUCKET_BRANCH=develop        # 커밋을 수집할 브랜치 (PoC 기본값: 
 
 # 중요: 반드시 "절대경로"로 지정하세요. 상대경로(./data.sqlite)면 cron/다른 위치에서
 # 실행할 때 엉뚱한 빈 DB를 열어 "no such table" 오류가 납니다.
-DB_PATH=/Users/<사용자>/Desktop/Automation/ai_productivity/data.sqlite
+DB_PATH=/Users/<사용자>/ai_productivity/data.sqlite
 SLACK_WEBHOOK=                  # 실패 알림이 필요하면 채우세요
 ```
 

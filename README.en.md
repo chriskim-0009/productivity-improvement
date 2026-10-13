@@ -70,7 +70,7 @@ BITBUCKET_BRANCH=develop        # branch to collect commits from (PoC default: d
 
 # IMPORTANT: use an ABSOLUTE path. A relative path (./data.sqlite) breaks when run
 # from cron or another directory (it opens an empty DB → "no such table" errors).
-DB_PATH=/Users/<you>/Desktop/Automation/ai_productivity/data.sqlite
+DB_PATH=/Users/<you>/ai_productivity/data.sqlite
 SLACK_WEBHOOK=                  # fill in if you want failure alerts
 ```
 

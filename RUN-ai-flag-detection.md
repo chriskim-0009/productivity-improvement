@@ -6,7 +6,7 @@
 전제: 이미 PoC 초기 세팅(가상환경·`.env`·DB)이 끝나 있어야 합니다. 아직이면 `README.md`의 "단계별 실행 순서"를 먼저 따르세요.
 
 ```bash
-cd /Users/kor-sel-ck-mac/Desktop/Automation/ai_productivity
+cd /Users/kor-sel-ck-mac/ai_productivity
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 ```
 
